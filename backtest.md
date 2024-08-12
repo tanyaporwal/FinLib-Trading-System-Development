@@ -1,0 +1,97 @@
+Backtest Your Trading Strategies
+
+
+- Initialize a TimeDataSeries with historical data
+- Create and configure Strategy using StrategyConfigData
+- Create an Instrument class initializing lot and minimum tick size
+- Create a Strategy instance on which backtesting needs to be performed
+- Creates a backtesting engine executor TSExecutor and initialize it with above handles
+- Run the backtesting engine
+- Analyse the backtesting report
+
+```
+
+// Initialize 1 minute time data series from csv file. We had subtracted 1 miniute while adding bar to time dataseries|
+// as in csv file bar time index is end of the bar and QXFinLib works on time index representing at start of a bar
+
+int compressionSecond = 60;
+
+TimeDataSeries timeDataSeries = new TimeDataSeries(BarCompression.MinuteBar,
+                                                                    compressionSecond,
+                                                                    BarType.CandleStick,
+                                                                    new TimeSpan(9, 15, 0),     // Session Start time
+                                                                    new TimeSpan(15, 30, 0));   // Session End time);
+
+string fileName = @"D:\Data\NIFTY-I_2020Futures.txt";
+
+CSVOHLCLoader csvOHLCLoader = new CSVOHLCLoader(fileName,
+                                                                BarDataFileFormat.Symbol_Date_Time_O_H_L_C_V_O,
+                                                                DateFormat.Custom,
+                                                                DateSeparator.None,
+                                                                "yyyyMMdd HH:mm",
+                                                                true);
+
+foreach (IBarData barData in csvOHLCLoader)
+{
+    timeDataSeries.AddBarData(barData.DateTimeDT.AddSeconds(-1), barData.Open, barData.High, barData.Low, barData.Close, barData.Volume);
+}
+
+
+StrategyBase strategyBase = new EMAStrategy();
+StrategyConfigData strategyConfigData = new StrategyConfigData();
+strategyConfigData.InitialCapital = 500000;
+
+strategyConfigData.Pyramiding = PyramidingType.Allow;
+strategyConfigData.MaxPyramidingPosition = 1;
+
+strategyConfigData.ContractMultiplier = 50;
+strategyConfigData.StopLossTriggerPoint = StopLossTriggerPoint.High_Low_Bar;
+strategyConfigData.OrderExecutionAt = OrderExecution.NextBar_Open;
+strategyConfigData.CommissionType = CommissionType.Percentage;
+strategyConfigData.FilledOrderCommission = .02;
+
+
+InstrumentBase instrument = new EquityInstrument(ExchangeSegment.NSECM, 111, "NIFTY-I", "NIFTY-I", "NIFTY-I", 50, 0.05);
+
+TSExecutor tsExecutor = new TSExecutor(strategyConfigData, instrument, timeDataSeries, strategyBase);
+strategyBase.SetFieldValue("FastLenthPeriod", 12);
+strategyBase.SetFieldValue("SlowLenthPeriod", 15);
+
+tsExecutor.Run();
+
+// Print the backtesting result
+
+ITradeStatistics tradeStatistics = tsExecutor.GetTradeStatistics();
+List<CloseTradeDetail> closeTradeDetailList = tradeStatistics.GetAllCloseTradeDetails();
+EquityDataSeries erquityDataSeries = tradeStatistics.GetEquityDataSeries();
+List<TradeDetail> tradeList = tradeStatistics.GetAllTrades();
+
+LogText(String.Format("============== TRADE LIST DATA =============="));
+foreach (TradeDetail tradeDetail in tradeList)
+{
+    LogText(String.Format("{0}", tradeDetail.ToString()));
+}
+
+LogText(String.Format("\n============== CLOSE TRADE DATA =============="));
+int index = 1;
+foreach (CloseTradeDetail closeTradeDetail in closeTradeDetailList)
+{
+    string test = closeTradeDetail.GetReport();
+    LogText(index.ToString() + ".  " + closeTradeDetail.ToString());
+    index++;
+}
+
+
+LogText(String.Format("\n============== EQUITY CURVE DATA =============="));
+foreach (EquityData equityData in erquityDataSeries)
+{
+    LogText(String.Format("{0, -50}{1,-100}", equityData.EquityPrice, equityData.SignalName));
+}
+
+LogText(String.Format("\n============== STATISTICS =============="));
+
+foreach (KeyValuePair<string, double> statsEntry in statistics)
+{
+    LogText(String.Format("{0, -50}{1,-100}", statsEntry.Key, statsEntry.Value));
+}
+```
